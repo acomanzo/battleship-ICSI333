@@ -32,8 +32,8 @@ if it was a hit, what type of ship was hit.
 #define hit 'X'				//Defines 'X' as value of hit
 #define miss 'O'			//Defines 'O' as value of miss
 #define blank '-'			//Defines '-' as value of blank
-#define column 10			//Defines number of columns
-#define row 10				//Defines number of rows
+#define COLUMNS 10			//Defines number of columns
+#define ROWS 10				//Defines number of rows
 
 #define PORT "3490"  // the port users will be connecting to
 #define BACKLOG 10   // how many pending connections queue will hold
@@ -197,7 +197,7 @@ int connect_to_client() {
 /*
 Initializes all variables for the game and creates the game board.
 */
-char** initialize(char *stat, char let[], char num[], int *boats, char board[row][column], char **pt, struct node *h, struct node *t, struct node *nn, int *socket_fd) {
+char** initialize(char *stat, char let[], char num[], int *boats, char board[ROWS][COLUMNS], char **pt, struct node *h, struct node *t, struct node *nn, int *socket_fd) {
 	h = NULL;		//Initialize head to null
 	t = NULL;		//Initialize tail to null
 	nn = NULL;		//Initialize a new node to null
@@ -208,9 +208,9 @@ char** initialize(char *stat, char let[], char num[], int *boats, char board[row
 	num = " ";		//Number of coordinate user inputs
 	*boats = 17;	//Number of spots left to hit
 	srand(time(NULL));
-	pt = (char **)malloc(row * column * sizeof(char *));	//Allocates memory for the board
-	for (int i = 0; i < row; i++) {		//Initializes rows
-		for (int j = 0; j < column; j++) {		//Initializaes columns
+	pt = (char **)malloc(ROWS * COLUMNS * sizeof(char *));	//Allocates memory for the board
+	for (int i = 0; i < ROWS; i++) {		//Initializes rows
+		for (int j = 0; j < COLUMNS; j++) {		//Initializaes columns
 			board[i][j] = blank;	//Initializes value of whole board
 		}
 	}
@@ -439,7 +439,7 @@ char** initialize(char *stat, char let[], char num[], int *boats, char board[row
 /*
 Updates the state of the coordinate to either hit or miss and checks if it was previously entered.
 */
-void update(char *stat, char *let, char num[], int *boats, char board[row][column], struct node *h, struct node *nn) {
+void update(char *stat, char *let, char num[], int *boats, char board[ROWS][COLUMNS], struct node *h, struct node *nn) {
 	int a = atoi(num);		//Converts value entered in number to integer
 	int b;
 	switch(*let) {		//Sets integer value of b based on value of letter
@@ -511,7 +511,7 @@ void update(char *stat, char *let, char num[], int *boats, char board[row][colum
 /*
 Prints the updated state of the coordinate.
 */
-void printupdate(char *stat, int boats, char board[row][column]) {
+void printupdate(char *stat, int boats, char board[ROWS][COLUMNS]) {
 	if(*stat == hit) {				//Checks if state is equal to hit
 		printf("It's a HIT.\n");	//Prints if user hit a ship when state is 'X' (is hit)
 		*stat = blank;				//Reverts state back to blank for next coordinate
@@ -521,8 +521,8 @@ void printupdate(char *stat, int boats, char board[row][column]) {
 	}
 	printf("Shots left to hit: %d\n", boats);	//Prints count of shots left to hit
 	printf(" 0 1 2 3 4 5 6 7 8 9\n");	//Prints labels for columns
-	for (int i = 0; i < row; i++) {
-		for (int j = 0; j < column; j++) {
+	for (int i = 0; i < ROWS; i++) {
+		for (int j = 0; j < COLUMNS; j++) {
 			printf(" ");
 			printf("%c", board[i][j]);	//Prints the values currently on the board
 		}
@@ -584,31 +584,34 @@ int main() {
 	char letter[3];		//Letter of coordinate user inputs
 	char number[3];		//Number of coordinate user inputs
 	int ships;				//Number of spots left to hit
-	char gameboard[row][column];	//Initializes grid for board
+	char gameboard[ROWS][COLUMNS];	//Initializes grid for board
 	char **boardpt;				//Board pointer
 	int socket_fd;
-	int numbytes = 0;
+	int numbytes = -1;
+	char col1 = 'A';
+	char row1 = 'B';
 	boardpt = initialize(&state, letter, number, &ships, gameboard, boardpt, head, tail, new_node, &socket_fd);
 	while(ships != 0) {		// Runs until count of ships reaches 0
 		//update(&state, letter, number, &ships, gameboard, head, new_node);
 		//printupdate(&state, ships, gameboard);
 		//insert_node(&head, &tail, new_node);
-		if ((numbytes = recv(socket_fd, letter, 2, 0)) == -1) {
+
+		if ((numbytes = recv(socket_fd, &col1, 1, 0)) == -1) {
 	  	perror("recv");
 	    exit(1);
 	  }
 		letter[numbytes] = '\0';
-		printf("Received letter: %s...\n", letter);
+		printf("Received letter: %c...\n", col1);
 
-		if ((numbytes = recv(socket_fd, number, 2, 0)) == -1) {
+		if ((numbytes = recv(socket_fd, &row1, 1, 0)) == -1) {
 	  	perror("recv");
 	    exit(1);
 	  }
 		number[numbytes] = '\0';
-		printf("Received number: %s...\n", number);
+		printf("Received number: %c...\n", row1);
 
 		ships--;
-		printf("tony\n");
+		numbytes = -1;
 	}
 	termination(boardpt, head, tail, new_node);
 }
