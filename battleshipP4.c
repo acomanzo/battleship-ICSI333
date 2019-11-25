@@ -1,21 +1,7 @@
-/*
-ICSI 333 Programming at the Hardware-Software Interface
-Fall 2019
-Friday 1:40pm
-Evan Poon and Tony Comanzo
-001324907 and 001381954
-
-Program is that of the game Battleship. Game board is created and ships
-are randomly placed onto the board. Prompts user for letter and number
-input for coordinates. Prints whether or not it's a hit or a miss. Runs
-until all available hit-spots are marked off. Creates a log file of all
-taken and lists coordinates fired at, whether it was a hit or miss, and,
-if it was a hit, what type of ship was hit.
-*/
-
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
+#include <string.h>
 #include <stdbool.h>
 #include <time.h>
 #include <fcntl.h>
@@ -29,27 +15,22 @@ if it was a hit, what type of ship was hit.
 #include <sys/wait.h>
 #include <signal.h>
 
-#define hit 'X'				//Defines 'X' as value of hit
-#define miss 'O'			//Defines 'O' as value of miss
-#define blank '-'			//Defines '-' as value of blank
-#define COLUMNS 10			//Defines number of columns
-#define ROWS 10				//Defines number of rows
+#define SIZE 10
 
 #define PORT "3490"  // the port users will be connecting to
 #define BACKLOG 10   // how many pending connections queue will hold
 #define MAXDATASIZE 100 // max number of bytes we can get at once
 
-/*
-Defines structure of node and elements of it
-*/
-struct node {
-	char ycoord;		//Letter (row)
-	char xcoord;		//Number (column)
-	char hitormiss[7];	//Hit or miss
-	char type[15];		//Ship type (if hit)
-	struct node *next;	//Pointer to next node
+struct move{
+	char letter;
+	int number;
+	char state[20];
+	char ship[20];
+	struct move *next;
 };
-struct node *head, *tail;		//Initialize pointers to head and tail of linked list
+
+char ipAddress[200], port[200];
+int ourSocket,listenSocket;
 
 void sigchld_handler(int s) {
 	(void)s; // quiet unused variable warning
@@ -68,48 +49,55 @@ void *get_in_addr(struct sockaddr *sa) {
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-int receive_from_their_socket(int socket_fd, char *letter, char *number) {
-	int numbytes;
-	char col1 = 'A';
-	char row1 = 'B';
-	
-	if ((numbytes = recv(socket_fd, &col1, 1, 0)) == -1) {
-  	perror("recv");
-    exit(1);
-  }
-	letter[numbytes] = '\0';
-	printf("Received letter: %c...\n", col1);
+void generateShip(char** board, int size, char letter) {
+	int noGood = 1;
+	int orientation , row, col;
+	int curRow, curCol;
+	while (noGood) {
+		orientation = random() % 2;
+		if (orientation == 0) { // Horizontal
+			row = random() % 10;
+			col = random() % (10 - size);
+		}
+		else {
+			row = random() % (10 - size);
+			col = random() % 10;
+		}
+		int noObstructions = 1;
+		for (int i=0;i<size;i++) {
+			curRow = row, curCol = col;
+			if (orientation == 0) { // Horizontal
+				curCol += i;
+			}
+			else {
+				curRow += i;
+			}
+			if (board[curRow][curCol] != '-')
+				noObstructions = 0;
+		}
+		if (noObstructions == 0)
+			continue;
 
-	if ((numbytes = recv(socket_fd, &row1, 1, 0)) == -1) {
-  	perror("recv");
-    exit(1);
-  }
-	number[numbytes] = '\0';
-	printf("Received number: %c...\n", row1);
-	
-	return 0;
+		noGood = 0;
+	}
+	printf ("Ship %c at %c%d-%c%d, orientation = %s\n",letter, row+65, col,curRow+65,
+	curCol, orientation==0?"horizontal" : "vertical");
+	for (int i=0;i<size;i++) {
+		curCol = col, curRow = row;
+		if (orientation == 0) { // Horizontal
+			curCol += i;
+		} else {
+			curRow += i;
+		}
+		board[curRow][curCol] = letter;
+	}
 }
 
-int send_to_their_socket(int socket_fd, char *letter, char *number) {
-	if (send(socket_fd, letter, 1, 0) == -1) {
-		perror("send");
-		exit(1);
-	}
-	printf("Sent letter: %c...\n", *letter);
-
-	if (send(socket_fd, number, 1, 0) == -1) {
-		perror("send");
-		exit(1);
-	}
-	printf("Sent number: %c...\n", *number);
-	
-	return 0;
-}
-
-// open a socket to listen to the specified port. Print the address and port.
-// Wait for a connection.
-int create_listening_socket() {
-	int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
+// server side
+void createSendingSocket() {
+	/*write the code here, you can refer to the lab9 handout */
+	//int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
+	int new_fd;
 	int numbytes;
   char buf[MAXDATASIZE];
   struct addrinfo hints, *servinfo, *p;
@@ -125,23 +113,23 @@ int create_listening_socket() {
   hints.ai_flags = AI_PASSIVE; // use my IP
   if ((rv = getaddrinfo("127.0.0.1", PORT, &hints, &servinfo)) != 0) {
       fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-      return 1;
+      return ;
   }
   // loop through all the results and bind to the first we can
   for(p = servinfo; p != NULL; p = p->ai_next) {
-    if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+    if ((ourSocket = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
       perror("server: socket");
       continue;
     }
 
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
+    if (setsockopt(ourSocket, SOL_SOCKET, SO_REUSEADDR, &yes,
     sizeof(int)) == -1) {
       perror("setsockopt");
       exit(1);
     }
 
-    if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-      close(sockfd);
+    if (bind(ourSocket, p->ai_addr, p->ai_addrlen) == -1) {
+      close(ourSocket);
       perror("server: bind");
       continue;
     }
@@ -156,7 +144,7 @@ int create_listening_socket() {
     exit(1);
   }
 
-  if (listen(sockfd, BACKLOG) == -1) {
+  if (listen(ourSocket, BACKLOG) == -1) {
     perror("listen");
     exit(1);
   }
@@ -173,7 +161,7 @@ int create_listening_socket() {
 
   while(1) {  // main accept() loop
     sin_size = sizeof their_addr;
-    new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
+    new_fd = accept(ourSocket, (struct sockaddr *)&their_addr, &sin_size);
     if (new_fd == -1) {
       perror("accept");
       continue;
@@ -185,488 +173,234 @@ int create_listening_socket() {
     printf("server: got connection from %s\n", s);
 		break;
   }
-	return new_fd;
+	//return new_fd;
 }
 
-int create_sending_socket(int *argc, char ***argv) {
-	int sockfd, numbytes;
+// client side
+void createListenSocket(char ***argv) {
+	/*write the code here, you can refer to the lab9 handout */
+	//int sockfd, numbytes;
+	int numbytes;
   char buf[MAXDATASIZE];
   struct addrinfo hints, *servinfo, *p;
   int rv;
   char s[INET6_ADDRSTRLEN];
-  if (*argc != 2) {
-    fprintf(stderr,"usage: client hostname\n");
-    exit(1);
-  }
+
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_STREAM;
   if ((rv = getaddrinfo((*argv)[1], PORT, &hints, &servinfo)) != 0) {
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-    return 1;
+    return ;
   }
 
   // loop through all the results and connect to the first we can
   for(p = servinfo; p != NULL; p = p->ai_next) {
-    if ((sockfd = socket(p->ai_family, p->ai_socktype,
+    if ((listenSocket = socket(p->ai_family, p->ai_socktype,
       p->ai_protocol)) == -1) {
       perror("client: socket");
       continue;
     }
 
-    if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+    if (connect(listenSocket, p->ai_addr, p->ai_addrlen) == -1) {
       perror("client: connect");
-      close(sockfd);
+      close(listenSocket);
       continue;
     }
 
     break;
   }
 
-
   if (p == NULL) {
     fprintf(stderr, "client: failed to connect\n");
-    return 2;
+    return ;
   }
 
   inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, sizeof s);
   printf("client: connecting to %s\n", s);
   freeaddrinfo(servinfo); // all done with this structure
 
-  return sockfd;
 }
 
+char** initialization(char ***argv){
+	if (ipAddress[0] == 0){
+		printf("create listen socket"); // i.e. create client side
+		/*add function call of create listen socket*/
+		createListenSocket(argv);
+	}
+	else{
+		printf("create sending socket"); // i.e. create server side
+		/*add function call of create sending socket*/
+		createSendingSocket();
+	}
 
-/*
-Initializes all variables for the game and creates the game board.
-*/
-char** initialize(char *stat, char let[], char num[], int *boats, char board[ROWS][COLUMNS], char **pt, struct node *h, struct node *t, struct node *nn, int *argc, char ***argv, int *socket_fd) {
-	h = NULL;		//Initialize head to null
-	t = NULL;		//Initialize tail to null
-	nn = NULL;		//Initialize a new node to null
-	h = (struct node *)malloc(sizeof(struct node));		//Allocates memory for head of linked list
-	t = (struct node *)malloc(sizeof(struct node));		//Allocates memory for tail of linked list
-	*stat = blank;	//Initializes state to be blank
-	let = " ";		//Letter of coordinate user inputs
-	num = " ";		//Number of coordinate user inputs
-	*boats = 17;	//Number of spots left to hit
+	int i, j;
+	char **board = (char**)malloc(sizeof(char*)*SIZE);
+	for (i = 0; i < SIZE; i++){
+		board[i] = (char*)malloc(sizeof(char)*SIZE);
+	}
+	for(i = 0; i < SIZE; i++){
+		for(j = 0; j < SIZE; j++){
+			board[i][j] = '-';
+		}
+	}
+	generateShip(board, 2,'D');
+	generateShip(board, 3,'S');
+	generateShip(board, 3,'C');
+	generateShip(board, 4,'B');
+	generateShip(board, 5,'R');
+	return board;
+}
+
+void insert_move(struct move **head, struct move **tail,struct move *temp){
+	if (*head == NULL){
+		/* List is currently empty. */
+		*head = *tail = temp;
+
+	} else{
+		(*tail)->next = temp;
+		*tail = (*tail)->next;
+	}
+}
+
+void update_state(char* state, char ** board, struct move** head,struct move** tail, struct move* temp){
+	int row, i, j;
+	char letter = temp->letter;
+	int col = temp->number;
+	row = letter % 65;
+	if(board[row][col] == '-'){
+		strcpy(state, "MISS");
+		strcpy(temp->state, "MISS");
+		strcpy(temp->ship, "  ");
+	} else{
+		strcpy(state, "HIT");
+		strcpy(temp->state, "HIT!");
+		switch (board[row][col]){
+			case 'C':  strcpy(temp->ship, "Crusier"); break;
+			case 'R':  strcpy(temp->ship, "Carrier"); break;
+			case 'B':  strcpy(temp->ship, "Battleship"); break;
+			case 'S':  strcpy(temp->ship, "Submarine"); break;
+			case 'D':  strcpy(temp->ship, "Destroyer"); break;
+		}
+		board[row][col]='X';
+	}
+	insert_move(head,tail,temp);
+	int counter = 0;
+	for(i=0; i < SIZE; i++){
+		for(j=0; j < SIZE; j++){
+			if(board[i][j] == '-' || board[i][j] == 'X')
+				counter += 1;
+		}
+	}
+	if(counter == SIZE * SIZE)
+		strcpy(state, "GAME OVER!");
+}
+
+struct move* accept_input(){
+	char letter;
+	int number;
+	bool flag = true;
+	do{
+		printf("Enter a letter A-J and number 0-9 ex. B4 - enter Z0 to end\n");
+		int size = scanf(" %c%d", &letter, &number);
+		if(size != 2){
+		printf("INVALID INPUT\n");
+		continue; }
+		letter = toupper(letter);
+		if(letter == 'Z' && number == 0)
+			break;
+
+		if (letter < 65 || letter > 74)
+			printf("INVALID INPUT\n");
+		else if (number <0 || number >9)
+			printf("INVALID INPUT\n");
+		else
+			flag = false;
+	}while(flag);
+		struct move *temp;
+		temp = (struct move *)malloc(sizeof(struct move));
+		temp->letter = letter;
+		temp->number = number;
+		return temp;
+}
+
+void display_state(char* state, char** board){
+	int i, j;
+	printf("**** %s ****\n\n", state);
+	printf(" 0 1 2 3 4 5 6 7 8 9\n");
+	for (i = 0; i < SIZE; i++){
+		printf("%c ", 65+i);
+		for (j = 0; j < SIZE; j++){
+			printf("%c ", board[i][j]);
+		}
+		printf("\n");
+	}
+}
+
+int teardown(char ** board,struct move* head){
+	int i;
+	struct move* temp;
+	for(i = 0; i < SIZE; i++)
+		free(board[i]);
+	free(board);
+	FILE *fptr;
+	fptr = fopen("log.txt", "w");
+	if (fptr == NULL) {
+		exit(-1);
+	}
+	if (head==NULL){
+		printf("The list is empty");
+	} else{
+		while (head != NULL){
+			fprintf(fptr, "Fired at %c%d %s %s \n", head->letter, head->number, head->state,
+			head->ship);
+			temp = head;
+			head = head->next;
+				free(temp);
+			}
+		}
+	fclose(fptr);
+	return 0;
+}
+
+int main(int argc, char **argv) {
+	if (argc != 3 && argc != 2) {
+		printf ("usage: battleship [ipaddress] port\n");
+		return 0;
+	}
+	if (argc == 3) {
+		// first is the ipaddress and
+		// second is the port, then we initialize
+		// the server side in initialization() function
+		strcpy(ipAddress,argv[1]);
+		strcpy(port,argv[2]);
+	}
+	else {
+		// if there is only one command line argument,
+		// then we initialize the client side in initialization
+		// function
+		memset(ipAddress,0,200);
+		strcpy(port,argv[1]);
+	}
 	srand(time(NULL));
-	pt = (char **)malloc(ROWS * COLUMNS * sizeof(char *));	//Allocates memory for the board
-	for (int i = 0; i < ROWS; i++) {		//Initializes rows
-		for (int j = 0; j < COLUMNS; j++) {		//Initializaes columns
-			board[i][j] = blank;	//Initializes value of whole board
-		}
-	}
-	int direction;		//Direction of the boat (horizontal or vertical)
-	int rowst;			//Start of ship on this row
-	int columnst;		//Start of ship on this column
-	int shipnumber;		//Ship number/type
-	bool ship1 = false;		//False until Carrier is placed
-	bool ship2 = false;		//False until Battleship is placed
-	bool ship3 = false;		//False until Cruiser is placed
-	bool ship4 = false;		//False unitl Submarine is placed
-	bool ship5 = false;		//False until Destroyer is placed
-	for(shipnumber = 1; shipnumber < 6; shipnumber++) {
-		direction = rand() % 2;			//Determines direction randomly
-		if(direction == 0) {			//Ship placed vertically
-			if(shipnumber == 1) {	//Ship number 1 is a carrier (5 spaces)
-				while(ship1 != true) {		//Runs until Carrier is placed
-					columnst = rand() % 10;		//Column start position randomly chosen
-					rowst = rand() % 10;		//Row start position randomly chosen
-					if((rowst+1 < 10 && rowst+2 < 10 && rowst+3 < 10 && rowst+4 < 10) &&
-            		(rowst-1 >= 0 && rowst-2 >= 0 && rowst-3 >= 0 && rowst-4 >= 0)) {
-						if((board[rowst][columnst] == '-' && board[rowst+1][columnst] == '-' && board[rowst+2][columnst] == '-' && board[rowst+3][columnst] == '-' && board[rowst+4][columnst] == '-')) {
-							board[rowst][columnst] = 'C';
-							board[rowst+1][columnst] = 'C';
-							board[rowst+2][columnst] = 'C';
-							board[rowst+3][columnst] = 'C';
-							board[rowst+4][columnst] = 'C';
-							ship1 = true;
-						}else if((board[rowst][columnst] == '-' && board[rowst-1][columnst] == '-' && board[rowst-2][columnst] == '-' && board[rowst-3][columnst] == '-' && board[rowst-4][columnst] == '-')) {
-							board[rowst][columnst] = 'C';
-							board[rowst-1][columnst] = 'C';
-							board[rowst-2][columnst] = 'C';
-							board[rowst-3][columnst] = 'C';
-							board[rowst-4][columnst] = 'C';
-							ship1 = true;
-						}
-					}
-				}
-			}else if(shipnumber == 2) {		//Ship number 2 is a battleship (4 spaces)
-				while(ship2 != true) {		//Runs until Battleship is placed
-					columnst = rand() % 10;		//Column start position randomly chosen
-					rowst = rand() % 10;		//Row start position randomly chosen
-					if((rowst+1 < 10 && rowst+2 < 10 && rowst+3 < 10) &&
-            		(rowst-1 >= 0 && rowst-2 >= 0 && rowst-3 >= 0)) {
-						if((board[rowst][columnst] == '-' && board[rowst+1][columnst] == '-' && board[rowst+2][columnst] == '-' && board[rowst+3][columnst] == '-')) {
-							board[rowst][columnst] = 'B';
-							board[rowst+1][columnst] = 'B';
-							board[rowst+2][columnst] = 'B';
-							board[rowst+3][columnst] = 'B';
-							ship2 = true;
-						}else if((board[rowst][columnst] == '-' && board[rowst-1][columnst] == '-' && board[rowst-2][columnst] == '-' && board[rowst-3][columnst] == '-')) {
-							board[rowst][columnst] = 'B';
-							board[rowst-1][columnst] = 'B';
-							board[rowst-2][columnst] = 'B';
-							board[rowst-3][columnst] = 'B';
-							ship2 = true;
-						}
-					}
-				}
-			}else if(shipnumber == 3) {	//Ship number 3 is a cruiser (3 spaces)
-				while(ship3 != true) {		//Runs until Cruiser is placed
-					columnst = rand() % 10;		//Column start position randomly chosen
-					rowst = rand() % 10;		//Row start position randomly chosen
-					if((rowst+1 < 10 && rowst+2 < 10) &&
-            		(rowst-1 >= 0 && rowst-2 >= 0)) {
-						if((board[rowst][columnst] == '-' && board[rowst+1][columnst] == '-' && board[rowst+2][columnst] == '-')) {
-							board[rowst][columnst] = 'R';
-							board[rowst+1][columnst] = 'R';
-							board[rowst+2][columnst] = 'R';
-							ship3 = true;
-						}else if((board[rowst][columnst] == '-' && board[rowst-1][columnst] == '-' && board[rowst-2][columnst] == '-')) {
-							board[rowst][columnst] = 'R';
-							board[rowst-1][columnst] = 'R';
-							board[rowst-2][columnst] = 'R';
-							ship3 = true;
-						}
-					}
-				}
-			}else if(shipnumber == 4) {	//Ship number 4 is a submarine (3 spaces)
-				while(ship4 != true) {		//Runs until Submarine is placed
-					columnst = rand() % 10;		//Column start position randomly chosen
-					rowst = rand() % 10;		//Row start position randomly chosen
-					if((rowst+1 < 10 && rowst+2 < 10) &&
-            		(rowst-1 >= 0 && rowst-2 >= 0)) {
-						if((board[rowst][columnst] == '-' && board[rowst+1][columnst] == '-' && board[rowst+2][columnst] == '-')) {
-							board[rowst][columnst] = 'S';
-							board[rowst+1][columnst] = 'S';
-							board[rowst+2][columnst] = 'S';
-							ship4 = true;
-						}else if((board[rowst][columnst] == '-' && board[rowst-1][columnst] == '-' && board[rowst-2][columnst] == '-')) {
-							board[rowst][columnst] = 'S';
-							board[rowst-1][columnst] = 'S';
-							board[rowst-2][columnst] = 'S';
-							ship4 = true;
-						}
-					}
-				}
-			}else if(shipnumber == 5) {	//Ship number 5 is a destroyer (2 spaces)
-				while(ship5 != true) {		//Runs until Destroyer is placed
-					columnst = rand() % 10;		//Column start position randomly chosen
-					rowst = rand() % 10;		//Row start position randomly chosen
-					if((rowst+1 < 10) && (rowst-1 >= 0)) {
-						if((board[rowst][columnst] == '-' && board[rowst+1][columnst] == '-')) {
-							board[rowst][columnst] = 'D';
-							board[rowst+1][columnst] = 'D';
-							ship5 = true;
-						}else if((board[rowst][columnst] == '-' && board[rowst-1][columnst] == '-')) {
-							board[rowst][columnst] = 'D';
-							board[rowst-1][columnst] = 'D';
-							ship5 = true;
-						}
-					}
-				}
-			}
-		}else if(direction == 1) {		//Ship placed horizontally
-			if(shipnumber == 1) {	//Ship number 1 is a carrier (5 spaces)
-				while(ship1 != true) {		//Runs until Carrier is placed
-					columnst = rand() % 10;		//Column start position randomly chosen
-					rowst = rand() % 10;		//Row start position randomly chosen
-					if((columnst+1 < 10 && columnst+2 < 10 && columnst+3 < 10 && columnst+4 < 10) &&
-            		(columnst-1 >= 0 && columnst-2 >= 0 && columnst-3 >= 0 && columnst-4 >= 0)) {
-						if((board[rowst][columnst] == '-' && board[rowst][columnst+1] == '-' && board[rowst][columnst+2] == '-' && board[rowst][columnst+3] == '-' && board[rowst][columnst+4] == '-')) {
-							board[rowst][columnst] = 'C';
-							board[rowst][columnst+1] = 'C';
-							board[rowst][columnst+2] = 'C';
-							board[rowst][columnst+3] = 'C';
-							board[rowst][columnst+4] = 'C';
-							ship1 = true;
-						}else if((board[rowst][columnst] == '-' && board[rowst][columnst-1] == '-' && board[rowst][columnst-2] == '-' && board[rowst][columnst-3] == '-' && board[rowst][columnst-4] == '-')){
-							board[rowst][columnst] = 'C';
-							board[rowst][columnst-1] = 'C';
-							board[rowst][columnst-2] = 'C';
-							board[rowst][columnst-3] = 'C';
-							board[rowst][columnst-4] = 'C';
-							ship1 = true;
-						}
-					}
-				}
-			}else if(shipnumber == 2) {		//Ship number 2 is a battleship (4 spaces)
-				while(ship2 != true) {		//Runs until Battleship is placed
-					columnst = rand() % 10;		//Column start position randomly chosen
-					rowst = rand() % 10;		//Row start position randomly chosen
-					if((columnst+1 < 10 && columnst+2 < 10 && columnst+3 < 10) &&
-            		(columnst-1 >= 0 && columnst-2 >= 0 && columnst-3 >= 0)) {
-						if((board[rowst][columnst] == '-' && board[rowst][columnst+1] == '-' && board[rowst][columnst+2] == '-' && board[rowst][columnst+3] == '-')) {
-							board[rowst][columnst] = 'B';
-							board[rowst][columnst+1] = 'B';
-							board[rowst][columnst+2] = 'B';
-							board[rowst][columnst+3] = 'B';
-							ship2 = true;
-						}else if((board[rowst][columnst] == '-' && board[rowst][columnst-1] == '-' && board[rowst][columnst-2] == '-' && board[rowst][columnst-3] == '-')){
-							board[rowst][columnst] = 'B';
-							board[rowst][columnst-1] = 'B';
-							board[rowst][columnst-2] = 'B';
-							board[rowst][columnst-3] = 'B';
-							ship2 = true;
-						}
-					}
-				}
-			}else if(shipnumber == 3) {	//Ship number 3 is a cruiser (3 spaces)
-				while(ship3 != true) {		//Runs until Cruiser is placed
-					columnst = rand() % 10;		//Column start position randomly chosen
-					rowst = rand() % 10;		//Row start position randomly chosen
-					if((columnst+1 < 10 && columnst+2 < 10) &&
-            		(columnst-1 >= 0 && columnst-2 >= 0)) {
-						if((board[rowst][columnst] == '-' && board[rowst][columnst+1] == '-' && board[rowst][columnst+2] == '-')) {
-							board[rowst][columnst] = 'R';
-							board[rowst][columnst+1] = 'R';
-							board[rowst][columnst+2] = 'R';
-							ship3 = true;
-						}else if((board[rowst][columnst] == '-' && board[rowst][columnst-1] == '-' && board[rowst][columnst-2] == '-')){
-							board[rowst][columnst] = 'R';
-							board[rowst][columnst-1] = 'R';
-							board[rowst][columnst-2] = 'R';
-							ship3 = true;
-						}
-					}
-				}
-			}else if(shipnumber == 4) {	//Ship number 4 is a submarine (3 spaces)
-				while(ship4 != true) {		//Runs until Submarine is placed
-					columnst = rand() % 10;		//Column start position randomly chosen
-					rowst = rand() % 10;		//Row start position randomly chosen
-					if((columnst+1 < 10 && columnst+2 < 10) &&
-            		(columnst-1 >= 0 && columnst-2 >= 0)) {
-						if((board[rowst][columnst] == '-' && board[rowst][columnst+1] == '-' && board[rowst][columnst+2] == '-')) {
-							board[rowst][columnst] = 'S';
-							board[rowst][columnst+1] = 'S';
-							board[rowst][columnst+2] = 'S';
-							ship4 = true;
-						}else if((board[rowst][columnst] == '-' && board[rowst][columnst-1] == '-' && board[rowst][columnst-2] == '-')){
-							board[rowst][columnst] = 'S';
-							board[rowst][columnst-1] = 'S';
-							board[rowst][columnst-2] = 'S';
-							ship4 = true;
-						}
-					}
-				}
-			}else if((shipnumber == 5 && board[rowst][columnst] == '-')) {	//Ship number 5 is a destroyer (2 spaces)
-				while(ship5 != true) {		//Runs until Destroyer is placed
-					columnst = rand() % 10;		//Column start position randomly chosen
-					rowst = rand() % 10;		//Row start position randomly chosen
-					if((columnst+1 < 10) && (columnst-1 >= 0)) {
-						if((board[rowst][columnst] == '-' && board[rowst][columnst+1] == '-')) {
-							board[rowst][columnst] = 'D';
-							board[rowst][columnst+1] = 'D';
-							ship5 = true;
-						}else if((board[rowst][columnst] == '-' && board[rowst][columnst-1] == '-')){
-							board[rowst][columnst] = 'D';
-							board[rowst][columnst-1] = 'D';
-							ship5 = true;
-						}
-					}
-				}
-			}
-		}
-	}
-	
-	*socket_fd = create_sending_socket(argc, argv);
-	
-	create_listening_socket();
-
-	return pt;		//Return value of pt
-}
-
-/*
-Accepts user input for a letter and number for coordinates to fire at.
-*/
-void input(char let[], char num[]) {
-	printf("Enter a capital letter from A to J: \n");
-	scanf("%s", let);		// Takes user input for a letter
-	fflush(stdout);
-	while (*let > 'J') {		// Runs if pointer to letter is greater than J
-		printf("Not a valid letter. Enter another: \n");
-		scanf("%s", let);	//Re-takes user input if first input was invalid
-		fflush(stdout);
-	}
-	printf("Enter a number from 0 to 9: \n");
-	scanf("%s", num);		// Takes user input for a number
-	fflush(stdout);
-	while (strlen(num) > 1) {		//Runs if number's length is greater than 1
-		printf("Not a valid number. Enter another: \n");
-		scanf("%s", num);		// Re-takes user input if first input was invalid
-		fflush(stdout);
-	}
-	printf("You fired at coordinate: %s%s\n", let, num);		//Prints coordinates fired at
-}
-
-/*
-Updates the state of the coordinate to either hit or miss and checks if it was previously entered.
-*/
-void update(char *stat, char *let, char num[], int *boats, char board[ROWS][COLUMNS], struct node *h, struct node *nn) {
-	int a = atoi(num);		//Converts value entered in number to integer
-	int b;
-	switch(*let) {		//Sets integer value of b based on value of letter
-		case 'A':
-			b = 0;
-			break;
-		case 'B':
-			b = 1;
-			break;
-		case 'C':
-			b = 2;
-			break;
-		case 'D':
-			b = 3;
-			break;
-		case 'E':
-			b = 4;
-			break;
-		case 'F':
-			b = 5;
-			break;
-		case 'G':
-			b = 6;
-			break;
-		case 'H':
-			b = 7;
-			break;
-		case 'I':
-			b = 8;
-			break;
-		case 'J':
-			b = 9;
-			break;
-	}
-	nn->ycoord = *let;		//New node takes input for letter as its y-coordinate
-	nn->xcoord = *num;		//New node takes input for number as its x-coordinate
-	if((board[b][a] == 'C' || board[b][a] == 'B' || board[b][a] == 'R' || board[b][a] == 'S' || board[b][a] == 'D')) { // Checks if pointer to letter and number are a vowel and even number
-		switch(board[b][a]) {		//Decide what type of ship the new node has hit
-			case 'C':
-				strcpy(nn->type, "Carrier");
-				break;
-			case 'B':
-				strcpy(nn->type, "Battleship");
-				break;
-			case 'R':
-				strcpy(nn->type, "Cruiser");
-				break;
-			case 'S':
-				strcpy(nn->type, "Submarine");
-				break;
-			case 'D':
-				strcpy(nn->type, "Destroyer");
-				break;
-		}
-		board[b][a] = hit;	//Changes character at this coordinate from '-' to 'X' (from blank to hit)
-		*stat = hit;	//Sets character of state to hit
-		*boats = *boats-1;	//Decrements count of ships if it's a hit
-		strcpy(nn->hitormiss, "Hit");		//New node takes a hit value
-	} 
-	else if(board[b][a] == '-') {		//Checks if value at this coordinate is blank
-		board[b][a] = miss;		//Changes character at this coordinate from '-' to 'O' (from blank to miss)
-		*stat = miss;	//Sets character of state to miss
-		strcpy(nn->hitormiss, "Miss");		//New node takes a miss value
-		strcpy(nn->type, "No ship");		//New node hasn't hit a ship
-	} 
-	else if(board[b][a] == miss || board[b][a] == hit) {	//Checks is value at this coordinate is a hit or miss
-		printf("You've already entered this coordinate.\n");
-	}
-}
-
-/*
-Prints the updated state of the coordinate.
-*/
-void printupdate(char *stat, int boats, char board[ROWS][COLUMNS]) {
-	if(*stat == hit) {				//Checks if state is equal to hit
-		printf("It's a HIT.\n");	//Prints if user hit a ship when state is 'X' (is hit)
-		*stat = blank;				//Reverts state back to blank for next coordinate
-	} else if(*stat == miss) {		//Checks if state is equal to miss
-		printf("It's a MISS.\n");	//Prints if user misses a ship when state is 'O' (is miss)
-		*stat = blank;
-	}
-	printf("Shots left to hit: %d\n", boats);	//Prints count of shots left to hit
-	printf(" 0 1 2 3 4 5 6 7 8 9\n");	//Prints labels for columns
-	for (int i = 0; i < ROWS; i++) {
-		for (int j = 0; j < COLUMNS; j++) {
-			printf(" ");
-			printf("%c", board[i][j]);	//Prints the values currently on the board
-		}
-		fputc('\n', stdout);
-	}
-}
-
-/*
-Inserts a new node at the end of a linked list.
-*/
-void insert_node(struct node **h, struct node **t, struct node *nn) {
-	struct node *temp;		//Temporary node created
-	if((temp = (struct node *)malloc(sizeof(struct node))) == NULL) {
-		printf("Allocation failed.\n");
-		exit(1);
-	}
-	temp->next = NULL;		//Initialize temp's next to null
-	temp->ycoord = nn->ycoord;		//Temp's y-coordinate is coordinate of new node
-	temp->xcoord = nn->xcoord;		//Temp's x-coordinate is coordinate of new node
-	strcpy(temp->hitormiss, nn->hitormiss);		//Temp copies new node's hit or miss status
-	strcpy(temp->type, nn->type);		//Temp copes new node's ship type hit
-	if(*h == NULL) {
-		*h = *t = temp;		//Makes head of linked list the temp node if head was NULL
-	} else {
-		(*t)->next = temp;		//Makes the tail's next node equal the temp node
-		*t = (*t)->next;		//Makes the new tail equal the previous tail's next
-	}
-}
-
-/*
-Terminates the game and clears the board.
-*/
-void termination(char **pt, struct node *h, struct node *t, struct node *nn) {
-	FILE *log;		//Pointer to file
-	if((log = fopen("log.txt", "w")) == NULL) {
-		printf("Can't open.\n");
-	} else {
-		fprintf(log, "LOG OF MOVES\n---------------------------------\n");
-		while(h != NULL) {
-			fprintf(log, "Fired at %c%c. %s - %s\n", h->ycoord, h->xcoord, h->hitormiss, h->type);		//Prints value of head into the file
-			h = h->next;		//Moves head to next node in linked list
-		}
-		fprintf(log, "END OF GAME\n");
-	}
-	printf("You sunk all my Battleships!\n");	//Prints when game ends
-	free(pt);		//Clears memory for the board
-	free(h);		//Clears memory for the head of linked list
-	free(t);		//Clears memory for the tail of linked list
-	free(nn);		//Clears memory for the new node of linked list
-}
-
-/*
-Starts the program and runs functions.
-*/
-int main(int argc, char *argv[]) {
-	struct node *new_node;		//Node to take in data throughout Battleship
-	new_node = (struct node *)malloc(sizeof(struct node));		//Allocates memory for new node
-	char state;			//Initializes state to be blank
-	char letter[2];		//Letter of coordinate user inputs
-	char number[2];		//Number of coordinate user inputs
-	int ships;				//Number of spots left to hit
-	char gameboard[ROWS][COLUMNS];	//Initializes grid for board
-	char **boardpt;				//Board pointer
-	int socket_fd;
-	boardpt = initialize(&state, letter, number, &ships, gameboard, boardpt, head, tail, new_node, &argc, &argv, &socket_fd);
-	while(ships != 0) {		// Runs until count of ships reaches 0
-		input(letter, number);
-		receive_from_their_socket(socket_fd, letter, number);
-		send_to_their_socket(socket_fd, letter, number);
-		
-		update(&state, letter, number, &ships, gameboard, head, new_node);
-		printupdate(&state, ships, gameboard);
-		insert_node(&head, &tail, new_node);
-		
-		ships--;
-
-		
-	}
-	termination(boardpt, head, tail, new_node);
+	char** board;
+	char state[] = "GAME START";
+	char flag[] = "GAME OVER!";
+	struct move *head, *tail, *ourMove;
+	head = tail = NULL;
+	/*modify the initialization function */
+	board = initialization(&argv);
+	do{
+		display_state(state, board);
+		ourMove = accept_input();
+		/*add code below to send our move to the other player*/
+		/*add code to receive the state of our move from the other player*/
+		/*add code to store our moves (letter, number, and result) into linked list*/
+		struct move theirMove;
+		/*add code below to receive theirMove from the other player*/
+		/*modify the update_state function to check theirMove is HIT or MISS
+		* and send the state back to the other player */
+	} while(strcmp(state, flag));
+	teardown(board, head);
+	return 0;
 }
