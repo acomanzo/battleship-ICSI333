@@ -17,8 +17,8 @@
 #define hit 'X'				//Defines 'X' as value of hit
 #define miss 'O'			//Defines 'O' as value of miss
 #define blank '-'			//Defines '-' as value of blank
-#define column 10			//Defines number of columns
-#define row 10				//Defines number of rows
+#define COLUMNS 10			//Defines number of columns
+#define ROWS 10				//Defines number of rows
 
 #define PORT "3490" // the port client will be connecting to
 #define MAXDATASIZE 100 // max number of bytes we can get at once
@@ -122,7 +122,7 @@ int connect_to_server(int *argc, char ***argv) {
 /*
 Initializes all variables for the game and creates the game board.
 */
-char** initialize(char *stat, char let[], char num[], int *boats, char board[row][column], char **pt, struct node *h, struct node *t, struct node *nn, int *argc, char ***argv, int *socket_fd) {
+char** initialize(char *stat, char let[], char num[], int *boats, char board[ROWS][COLUMNS], char **pt, struct node *h, struct node *t, struct node *nn, int *argc, char ***argv, int *socket_fd) {
 	h = NULL;		//Initialize head to null
 	t = NULL;		//Initialize tail to null
 	nn = NULL;		//Initialize a new node to null
@@ -133,9 +133,9 @@ char** initialize(char *stat, char let[], char num[], int *boats, char board[row
 	num = " ";		//Number of coordinate user inputs
 	*boats = 17;	//Number of spots left to hit
 	srand(time(NULL));
-	pt = (char **)malloc(row * column * sizeof(char *));	//Allocates memory for the board
-	for (int i = 0; i < row; i++) {		//Initializes rows
-		for (int j = 0; j < column; j++) {		//Initializaes columns
+	pt = (char **)malloc(ROWS * COLUMNS * sizeof(char *));	//Allocates memory for the board
+	for (int i = 0; i < ROWS; i++) {		//Initializes rows
+		for (int j = 0; j < COLUMNS; j++) {		//Initializaes columns
 			board[i][j] = blank;	//Initializes value of whole board
 		}
 	}
@@ -367,19 +367,22 @@ Accepts user input for a letter and number for coordinates to fire at.
 void input(char let[], char num[]) {
 	printf("Enter a capital letter from A to J: \n");
 	scanf("%s", let);		// Takes user input for a letter
+	fflush(stdout);
 	while (*let > 'J') {		// Runs if pointer to letter is greater than J
 		printf("Not a valid letter. Enter another: \n");
 		scanf("%s", let);	//Re-takes user input if first input was invalid
+		fflush(stdout);
 	}
 	printf("Enter a number from 0 to 9: \n");
 	scanf("%s", num);		// Takes user input for a number
+	fflush(stdout);
 	while (strlen(num) > 1) {		//Runs if number's length is greater than 1
 		printf("Not a valid number. Enter another: \n");
 		scanf("%s", num);		// Re-takes user input if first input was invalid
+		fflush(stdout);
 	}
 	printf("You fired at coordinate: %s%s\n", let, num);		//Prints coordinates fired at
 }
-
 
 /*
 Terminates the game and clears the board.
@@ -403,6 +406,167 @@ void termination(char **pt, struct node *h, struct node *t, struct node *nn) {
 	free(nn);		//Clears memory for the new node of linked list
 }
 
+/**
+	Prompt's the user to enter a letter A through J that indicates the column
+	of the coordinate that the user wants to shoot. Returns an integer value
+	to represent that column.
+**/
+char get_col_coordinate(struct node *node_ptr) {
+	// a char to represent the column letter
+	char col;
+	// a string to hold in the input
+	char input[5];
+	printf("Enter a column letter (A-J).");
+	// an int to hold the length of the user's input
+	int len = 0;
+
+	fgets(input, 5, stdin);
+	len = strlen(input);
+	//flush the input buffer of extra characters
+	/*if(len > 4) {
+		while ((getchar()) != '\n');
+	}*/
+	while ((getchar()) != '\n');
+	// if the user doesn't enter a single letter, print error
+	if(len != 2) {
+		printf("Invalid input. Try again by entering a single letter.\n");
+		return get_col_coordinate(node_ptr);
+	}
+
+	// an int to hold the output
+	char output = 0;
+	col = input[0];
+	switch(col) {
+		case 'A' :
+		case 'a' :
+			node_ptr->xcoord = 'A';
+			output = 1;
+			break;
+		case 'B' :
+		case 'b' :
+			node_ptr->xcoord = 'B';
+			output = 2;
+			break;
+		case 'C' :
+		case 'c' :
+			node_ptr->xcoord = 'C';
+			output = 3;
+			break;
+		case 'D' :
+		case 'd' :
+			node_ptr->xcoord = 'D';
+			output = 4;
+			break;
+		case 'E' :
+		case 'e' :
+			node_ptr->xcoord = 'E';
+			output = 5;
+			break;
+		case 'F' :
+		case 'f' :
+			node_ptr->xcoord = 'F';
+			output = 6;
+			break;
+		case 'G' :
+		case 'g' :
+			node_ptr->xcoord = 'G';
+			output = 7;
+			break;
+		case 'H' :
+		case 'h' :
+			node_ptr->xcoord = 'H';
+			output = 8;
+			break;
+		case 'I' :
+		case 'i' :
+			node_ptr->xcoord = 'I';
+			output = 9;
+			break;
+		case 'J' :
+		case 'j' :
+			node_ptr->xcoord = 'J';
+			output = 10;
+			break;
+		default :
+			printf("Invalid input. Try again with a letter A through J.\n");
+			output = get_col_coordinate(node_ptr);
+			break;
+	}
+
+	//node_ptr->col = output;
+	return col;
+}
+
+/**
+	Prompt's the user to enter a number 0 through 9 that indicates the row
+	of the coordinate that the user wants to shoot. Returns an integer value
+	to represent that row.
+**/
+char get_row_coordinate(struct node *node_ptr) {
+	// an int to represent the row
+	int rowww = 0;
+	// a char to hold the user input
+	char input[5];
+	printf("Enter a row number (0-9).\n");
+	// an int to hold the length of the user's input
+	int len = 0;
+
+	fgets(input, 5, stdin);
+	len = strlen(input);
+	// flush the input buffer of extra characters
+	if(len >= 4) {
+		while ((getchar()) != '\n');
+	}
+	// if the user doesn't enter a single digit number, print error
+	if(len != 2) {
+		printf("Invalid input. Try again by entering a single digit.\n");
+		return get_row_coordinate(node_ptr);
+	}
+
+	// an int to hold the output
+	char output = 0;
+	rowww = input[0];
+	switch(rowww) {
+		case '0' :
+			output = 1;
+			break;
+		case '1' :
+			output = 2;
+			break;
+		case '2' :
+			output = 3;
+			break;
+		case '3' :
+			output = 4;
+			break;
+		case '4' :
+			output = 5;
+			break;
+		case '5' :
+			output = 6;
+			break;
+		case '6' :
+			output = 7;
+			break;
+		case '7' :
+			output = 8;
+			break;
+		case '8' :
+			output = 9;
+			break;
+		case '9' :
+			output = 10;
+			break;
+		default :
+			printf("Invalid input. Try again.\n");
+			output = get_row_coordinate(node_ptr);
+			break;
+	}
+
+	node_ptr->ycoord = output - 1;
+	return rowww;
+}
+
 /*
 Starts the program and runs functions.
 */
@@ -410,32 +574,30 @@ int main(int argc, char *argv[]) {
 	struct node *new_node;		//Node to take in data throughout Battleship
 	new_node = (struct node *)malloc(sizeof(struct node));		//Allocates memory for new node
 	char state;			//Initializes state to be blank
-	char letter[3];		//Letter of coordinate user inputs
-	char number[3];		//Number of coordinate user inputs
+	char letter[2];		//Letter of coordinate user inputs
+	char number[2];		//Number of coordinate user inputs
 	int ships;				//Number of spots left to hit
-	char gameboard[row][column];	//Initializes grid for board
+	char gameboard[ROWS][COLUMNS];	//Initializes grid for board
 	char **boardpt;				//Board pointer
 	int socket_fd;
 	boardpt = initialize(&state, letter, number, &ships, gameboard, boardpt, head, tail, new_node, &argc, &argv, &socket_fd);
 	while(ships != 0) {		// Runs until count of ships reaches 0
-		input(letter, number);
+		*letter = get_col_coordinate(new_node);
+		*number = get_row_coordinate(new_node);
 
-		if (send(socket_fd, letter, 3, 0) == -1) {
+		if (send(socket_fd, letter, 1, 0) == -1) {
 			perror("send");
 			exit(1);
 		}
-		printf("Sent letter: %s...\n", letter);
+		printf("Sent letter: %c...\n", *letter);
 
-		if (send(socket_fd, number, 3, 0) == -1) {
+		if (send(socket_fd, number, 1, 0) == -1) {
 			perror("send");
 			exit(1);
 		}
-		printf("Sent number: %s...\n", number);
-		//update(&state, letter, number, &ships, gameboard, head, new_node);
-		//printupdate(&state, ships, gameboard);
-		//insert_node(&head, &tail, new_node);
+		printf("Sent number: %c...\n", *number);
+
 		ships--;
-		printf("evan\n");
 	}
 	termination(boardpt, head, tail, new_node);
 }
