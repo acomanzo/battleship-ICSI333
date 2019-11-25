@@ -19,12 +19,25 @@ if it was a hit, what type of ship was hit.
 #include <stdbool.h>
 #include <time.h>
 #include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <sys/wait.h>
+#include <signal.h>
 
 #define hit 'X'				//Defines 'X' as value of hit
 #define miss 'O'			//Defines 'O' as value of miss
 #define blank '-'			//Defines '-' as value of blank
 #define column 10			//Defines number of columns
 #define row 10				//Defines number of rows
+
+#define PORT "3490"  // the port users will be connecting to
+#define BACKLOG 10   // how many pending connections queue will hold
+#define MAXDATASIZE 100 // max number of bytes we can get at once
 
 /*
 Defines structure of node and elements of it
@@ -38,10 +51,153 @@ struct node {
 };
 struct node *head, *tail;		//Initialize pointers to head and tail of linked list
 
+void sigchld_handler(int s) {
+	(void)s; // quiet unused variable warning
+	// waitpid() might overwrite errno, so we save and restore it
+	int save_errno = errno;
+	while(waitpid(-1, NULL, WNOHANG) > 0);
+	errno = save_errno;
+}
+
+// get sockaddr, IPv4 or IPv6
+void *get_in_addr(struct sockaddr *sa) {
+	// if the sockaddr is IP4
+	if (sa->sa_family == AF_INET) {
+		return &(((struct sockaddr_in*)sa)->sin_addr);
+	}
+	return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
+void communicate_with_client(int sockfd) {
+	/*char buff[MAX];
+	int n;
+	printf("tony");
+	// initiate loop for chat
+	while(1) {
+		bzero(buff, MAX);
+
+		// read the message
+		read(sockfd, buff, sizeof(buff));
+		// print buffer which contains the client contents
+		printf("From client: %s\n To client: ", buff);
+		bzero(buff, MAX);
+		n = 0;
+		// copy server message in the buffer
+		while ((buff[n++] = getchar()) != '\n');
+
+		// and send that buffer to client
+		write(sockfd, buff, sizeof(buff));
+	}*/
+}
+
+// open a socket to listen to the specified port. Print the address and port.
+// Wait for a connection.
+int connect_to_client() {
+	int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
+	int numbytes;
+  char buf[MAXDATASIZE];
+  struct addrinfo hints, *servinfo, *p;
+  struct sockaddr_storage their_addr; // connector's address information
+  socklen_t sin_size;
+  struct sigaction sa;
+  int yes = 1;
+  char s[INET6_ADDRSTRLEN];
+  int rv;
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_flags = AI_PASSIVE; // use my IP
+  if ((rv = getaddrinfo("127.0.0.1", PORT, &hints, &servinfo)) != 0) {
+      fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+      return 1;
+  }
+  // loop through all the results and bind to the first we can
+  for(p = servinfo; p != NULL; p = p->ai_next) {
+    if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+      perror("server: socket");
+      continue;
+    }
+
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
+    sizeof(int)) == -1) {
+      perror("setsockopt");
+      exit(1);
+    }
+
+    if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+      close(sockfd);
+      perror("server: bind");
+      continue;
+    }
+
+    break;
+  }
+
+  freeaddrinfo(servinfo); // all done with this structure
+
+  if (p == NULL)  {
+    fprintf(stderr, "server: failed to bind\n");
+    exit(1);
+  }
+
+  if (listen(sockfd, BACKLOG) == -1) {
+    perror("listen");
+    exit(1);
+  }
+
+  sa.sa_handler = sigchld_handler; // reap all dead processes
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = SA_RESTART;
+  if (sigaction(SIGCHLD, &sa, NULL) == -1) {
+    perror("sigaction");
+    exit(1);
+  }
+
+  printf("server: waiting for connections...\n");
+
+  while(1) {  // main accept() loop
+    sin_size = sizeof their_addr;
+    new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
+    if (new_fd == -1) {
+      perror("accept");
+      continue;
+    }
+
+    inet_ntop(their_addr.ss_family,
+      get_in_addr((struct sockaddr *)&their_addr),
+      s, sizeof s);
+    printf("server: got connection from %s\n", s);
+		break;
+    /*if (!fork()) { // this is the child process
+      close(sockfd); // child doesn't need the listener
+      if (send(new_fd, "Hello, world!", 13, 0) == -1)
+        perror("send");
+      close(new_fd);
+      exit(0);
+    }*/
+
+
+  }
+	if (send(new_fd, "Hello, World!", 13, 0) == -1)
+		perror("send");
+	printf("hey there\n");
+
+	if ((numbytes = recv(new_fd, buf, MAXDATASIZE-1, 0)) == -1) {
+  	perror("recv");
+    exit(1);
+  }
+	buf[numbytes] = '\0';
+	printf("took %s\n", buf);
+	//close(new_fd);  // parent doesn't need this
+	//return 0;
+	printf("HEY\n");
+	return new_fd;
+}
+
 /*
 Initializes all variables for the game and creates the game board.
 */
-char** initialize(char *stat, char let[], char num[], int *boats, char board[row][column], char **pt, struct node *h, struct node *t, struct node *nn) {
+char** initialize(char *stat, char let[], char num[], int *boats, char board[row][column], char **pt, struct node *h, struct node *t, struct node *nn, int *socket_fd) {
 	h = NULL;		//Initialize head to null
 	t = NULL;		//Initialize tail to null
 	nn = NULL;		//Initialize a new node to null
@@ -271,6 +427,12 @@ char** initialize(char *stat, char let[], char num[], int *boats, char board[row
 			}
 		}
 	}
+
+	printf("whoa\n");
+	*socket_fd = connect_to_client();
+	printf("bye\n");
+	//communicate_with_client(sockfd);
+
 	return pt;		//Return value of pt
 }
 
@@ -424,12 +586,29 @@ int main() {
 	int ships;				//Number of spots left to hit
 	char gameboard[row][column];	//Initializes grid for board
 	char **boardpt;				//Board pointer
-	boardpt = initialize(&state, letter, number, &ships, gameboard, boardpt, head, tail, new_node);
+	int socket_fd;
+	int numbytes = 0;
+	boardpt = initialize(&state, letter, number, &ships, gameboard, boardpt, head, tail, new_node, &socket_fd);
 	while(ships != 0) {		// Runs until count of ships reaches 0
-		input(letter, number);
-		update(&state, letter, number, &ships, gameboard, head, new_node);
-		printupdate(&state, ships, gameboard);
-		insert_node(&head, &tail, new_node);
+		//update(&state, letter, number, &ships, gameboard, head, new_node);
+		//printupdate(&state, ships, gameboard);
+		//insert_node(&head, &tail, new_node);
+		if ((numbytes = recv(socket_fd, letter, 2, 0)) == -1) {
+	  	perror("recv");
+	    exit(1);
+	  }
+		letter[numbytes] = '\0';
+		printf("Received letter: %s...\n", letter);
+
+		if ((numbytes = recv(socket_fd, number, 2, 0)) == -1) {
+	  	perror("recv");
+	    exit(1);
+	  }
+		number[numbytes] = '\0';
+		printf("Received number: %s...\n", number);
+
+		ships--;
+		printf("tony\n");
 	}
 	termination(boardpt, head, tail, new_node);
 }
