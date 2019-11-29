@@ -1,3 +1,6 @@
+// usage for server: battleshipP4 ipaddress port
+// usage for client: battleshipP4 ipaddress
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -263,7 +266,8 @@ void insert_move(struct move **head, struct move **tail,struct move *temp){
 	}
 }
 
-void update_state(char* state, char ** board, struct move** head,struct move** tail, struct move* temp){
+// int flag represents their data if 1 and our data if 0
+void update_state(char* state, char ** board, struct move** head,struct move** tail, struct move* temp, int flag){
 	int row, i, j;
 	char letter = temp->letter;
 	int col = temp->number;
@@ -284,7 +288,9 @@ void update_state(char* state, char ** board, struct move** head,struct move** t
 		}
 		board[row][col]='X';
 	}
-	insert_move(head,tail,temp);
+	if (flag == 0) {
+		insert_move(head,tail,temp);
+	}
 	int counter = 0;
 	for(i=0; i < SIZE; i++){
 		for(j=0; j < SIZE; j++){
@@ -363,6 +369,54 @@ int teardown(char ** board,struct move* head){
 	return 0;
 }
 
+int receive_letter(int socket_fd, char *letter) {
+	int numbytes;
+ 	//char row = 'A';
+
+	if ((numbytes = recv(socket_fd, letter, 1, 0)) == -1) {
+  	perror("recv");
+    exit(1);
+  }
+	//letter[numbytes] = '\0';
+	printf("Received letter: %c...\n", *letter);
+
+	return 0;
+}
+
+int receive_number(int socket_fd, int *number) {
+	int numbytes;
+	//int col = '0';
+
+	if ((numbytes = recv(socket_fd, number, 1, 0)) == -1) {
+		perror("recv");
+		exit(1);
+	}
+	//letter[numbtyes] = '\0';
+	printf("Received number: %d\n", *number);
+
+	return 0;
+}
+
+int send_letter(int socket_fd, char *letter) {
+	if (send(socket_fd, letter, 1, 0) == -1) {
+		perror("send");
+		exit(1);
+	}
+	printf("Sent letter: %c...\n", *letter);
+
+	return 0;
+}
+
+int send_number(int socket_fd, int *number) {
+	if (send(socket_fd, number, 1, 0) == -1) {
+		perror("send");
+		exit(1);
+	}
+	printf("Sent number: %d\n", *number);
+
+	return 0;
+}
+
 int main(int argc, char **argv) {
 	if (argc != 3 && argc != 2) {
 		printf ("usage: battleship [ipaddress] port\n");
@@ -394,12 +448,44 @@ int main(int argc, char **argv) {
 		display_state(state, board);
 		ourMove = accept_input();
 		/*add code below to send our move to the other player*/
+		if (send_letter(ourSocket, &(ourMove->letter)) != 0) {
+			printf("Error sending letter.\n");
+			exit(1);
+		}
+		if (send_number(ourSocket, &(ourMove->number)) != 0) {
+			printf("Error sending number.\n");
+			exit(1);
+		}
 		/*add code to receive the state of our move from the other player*/
+		char buffer[20];
+		int numbytes = 0;
+		if ((numbytes = recv(listenSocket, buffer, 4, 0)) == -1) {
+			perror("recv");
+			exit(1);
+		}
+		buffer[numbytes] = '\0';
+		printf("Received state: %s\n", buffer);
+		strcpy(state, buffer);
 		/*add code to store our moves (letter, number, and result) into linked list*/
+		strcpy(ourMove->state, state);
 		struct move theirMove;
 		/*add code below to receive theirMove from the other player*/
+		if (receive_letter(listenSocket, &(theirMove.letter)) != 0) {
+			printf("Error receiving letter.\n");
+			exit(1);
+		}
+		if (receive_number(listenSocket, &(theirMove.number)) != 0) {
+			printf("Error receiving number.\n");
+			exit(1);
+		}
 		/*modify the update_state function to check theirMove is HIT or MISS
 		* and send the state back to the other player */
+		update_state(state, board, &head, &tail, &theirMove, 0);
+		if (send(ourSocket, theirMove.state, 4, 0) == -1) {
+			perror("send");
+			exit(1);
+		}
+		printf("Sent state: %s\n", theirMove.state);
 	} while(strcmp(state, flag));
 	teardown(board, head);
 	return 0;
