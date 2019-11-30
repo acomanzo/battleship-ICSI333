@@ -1,5 +1,5 @@
-// usage for server: battleshipP4 ipaddress port
-// usage for client: battleshipP4 ipaddress
+// usage for server: battleshipP4 port
+// usage for client: battleshipP4 ipaddress port
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -96,11 +96,58 @@ void generateShip(char** board, int size, char letter) {
 	}
 }
 
+// client side
+void createSendingSocket(char ***argv) {
+	/*write the code here, you can refer to the lab9 handout */
+	//int sockfd, numbytes;
+	int numbytes;
+  char buf[MAXDATASIZE];
+  struct addrinfo hints, *servinfo, *p;
+  int rv;
+  char s[INET6_ADDRSTRLEN];
+
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  if ((rv = getaddrinfo((*argv)[1], PORT, &hints, &servinfo)) != 0) {
+    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+    return ;
+  }
+
+  // loop through all the results and connect to the first we can
+  for(p = servinfo; p != NULL; p = p->ai_next) {
+    if ((ourSocket = socket(p->ai_family, p->ai_socktype,
+      p->ai_protocol)) == -1) {
+      perror("client: socket");
+      continue;
+    }
+
+    if (connect(ourSocket, p->ai_addr, p->ai_addrlen) == -1) {
+      perror("client: connect");
+      close(ourSocket);
+      continue;
+    }
+
+    break;
+  }
+
+  if (p == NULL) {
+    fprintf(stderr, "client: failed to connect\n");
+    return ;
+  }
+
+  inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, sizeof s);
+  printf("client: connecting to %s\n", s);
+  freeaddrinfo(servinfo); // all done with this structure
+
+	printf("ourSocket: %d\n", ourSocket);
+}
+
 // server side
-void createSendingSocket() {
+void createListenSocket() {
 	/*write the code here, you can refer to the lab9 handout */
 	//int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
-	int new_fd;
+	//int new_fd;
 	int numbytes;
   char buf[MAXDATASIZE];
   struct addrinfo hints, *servinfo, *p;
@@ -120,19 +167,19 @@ void createSendingSocket() {
   }
   // loop through all the results and bind to the first we can
   for(p = servinfo; p != NULL; p = p->ai_next) {
-    if ((ourSocket = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+    if ((listenSocket = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
       perror("server: socket");
       continue;
     }
 
-    if (setsockopt(ourSocket, SOL_SOCKET, SO_REUSEADDR, &yes,
+    if (setsockopt(listenSocket, SOL_SOCKET, SO_REUSEADDR, &yes,
     sizeof(int)) == -1) {
       perror("setsockopt");
       exit(1);
     }
 
-    if (bind(ourSocket, p->ai_addr, p->ai_addrlen) == -1) {
-      close(ourSocket);
+    if (bind(listenSocket, p->ai_addr, p->ai_addrlen) == -1) {
+      close(listenSocket);
       perror("server: bind");
       continue;
     }
@@ -147,7 +194,7 @@ void createSendingSocket() {
     exit(1);
   }
 
-  if (listen(ourSocket, BACKLOG) == -1) {
+  if (listen(listenSocket, BACKLOG) == -1) {
     perror("listen");
     exit(1);
   }
@@ -164,8 +211,9 @@ void createSendingSocket() {
 
   while(1) {  // main accept() loop
     sin_size = sizeof their_addr;
-    new_fd = accept(ourSocket, (struct sockaddr *)&their_addr, &sin_size);
-    if (new_fd == -1) {
+    listenSocket = accept(listenSocket, (struct sockaddr *)&their_addr, &sin_size);
+    //if (new_fd == -1) {
+		if (listenSocket == -1) {
       perror("accept");
       continue;
     }
@@ -176,65 +224,24 @@ void createSendingSocket() {
     printf("server: got connection from %s\n", s);
 		break;
   }
+	//printf("new_fd: %d\n", new_fd);
+	printf("listenSocket: %d\n", listenSocket);
 	//return new_fd;
-}
-
-// client side
-void createListenSocket(char ***argv) {
-	/*write the code here, you can refer to the lab9 handout */
-	//int sockfd, numbytes;
-	int numbytes;
-  char buf[MAXDATASIZE];
-  struct addrinfo hints, *servinfo, *p;
-  int rv;
-  char s[INET6_ADDRSTRLEN];
-
-  memset(&hints, 0, sizeof hints);
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_STREAM;
-  if ((rv = getaddrinfo((*argv)[1], PORT, &hints, &servinfo)) != 0) {
-    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-    return ;
-  }
-
-  // loop through all the results and connect to the first we can
-  for(p = servinfo; p != NULL; p = p->ai_next) {
-    if ((listenSocket = socket(p->ai_family, p->ai_socktype,
-      p->ai_protocol)) == -1) {
-      perror("client: socket");
-      continue;
-    }
-
-    if (connect(listenSocket, p->ai_addr, p->ai_addrlen) == -1) {
-      perror("client: connect");
-      close(listenSocket);
-      continue;
-    }
-
-    break;
-  }
-
-  if (p == NULL) {
-    fprintf(stderr, "client: failed to connect\n");
-    return ;
-  }
-
-  inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, sizeof s);
-  printf("client: connecting to %s\n", s);
-  freeaddrinfo(servinfo); // all done with this structure
-
+	//theirSocket = new_fd;
 }
 
 char** initialization(char ***argv){
 	if (ipAddress[0] == 0){
-		printf("create listen socket"); // i.e. create client side
+		printf("create listen socket");
+		// i.e. create server side
 		/*add function call of create listen socket*/
-		createListenSocket(argv);
+		createListenSocket();
 	}
 	else{
-		printf("create sending socket"); // i.e. create server side
+		printf("create sending socket");
+		// i.e. create client side
 		/*add function call of create sending socket*/
-		createSendingSocket();
+		createSendingSocket(argv);
 	}
 
 	int i, j;
@@ -423,16 +430,15 @@ int main(int argc, char **argv) {
 		return 0;
 	}
 	if (argc == 3) {
-		// first is the ipaddress and
-		// second is the port, then we initialize
-		// the server side in initialization() function
+		/* if there are two command line arguments, where the first
+		is the ipaddress and the second is the port, then we initialize
+		the client side in initialization() function */
 		strcpy(ipAddress,argv[1]);
 		strcpy(port,argv[2]);
 	}
 	else {
-		// if there is only one command line argument,
-		// then we initialize the client side in initialization
-		// function
+		/* if there is only one command line argument, then we initialize
+		the server side in initialization function */
 		memset(ipAddress,0,200);
 		strcpy(port,argv[1]);
 	}
@@ -448,18 +454,19 @@ int main(int argc, char **argv) {
 		display_state(state, board);
 		ourMove = accept_input();
 		/*add code below to send our move to the other player*/
-		if (send_letter(ourSocket, &(ourMove->letter)) != 0) {
+		if (send_letter(listenSocket, &(ourMove->letter)) != 0) {
 			printf("Error sending letter.\n");
 			exit(1);
 		}
-		if (send_number(ourSocket, &(ourMove->number)) != 0) {
+		if (send_number(listenSocket, &(ourMove->number)) != 0) {
 			printf("Error sending number.\n");
 			exit(1);
 		}
 		/*add code to receive the state of our move from the other player*/
 		char buffer[20];
 		int numbytes = 0;
-		if ((numbytes = recv(listenSocket, buffer, 4, 0)) == -1) {
+		printf("ourSocket: %d\n", ourSocket);
+		if ((numbytes = recv(ourSocket, buffer, 4, 0)) == -1) {
 			perror("recv");
 			exit(1);
 		}
@@ -470,18 +477,18 @@ int main(int argc, char **argv) {
 		strcpy(ourMove->state, state);
 		struct move theirMove;
 		/*add code below to receive theirMove from the other player*/
-		if (receive_letter(listenSocket, &(theirMove.letter)) != 0) {
+		if (receive_letter(ourSocket, &(theirMove.letter)) != 0) {
 			printf("Error receiving letter.\n");
 			exit(1);
 		}
-		if (receive_number(listenSocket, &(theirMove.number)) != 0) {
+		if (receive_number(ourSocket, &(theirMove.number)) != 0) {
 			printf("Error receiving number.\n");
 			exit(1);
 		}
 		/*modify the update_state function to check theirMove is HIT or MISS
 		* and send the state back to the other player */
 		update_state(state, board, &head, &tail, &theirMove, 0);
-		if (send(ourSocket, theirMove.state, 4, 0) == -1) {
+		if (send(listenSocket, theirMove.state, 4, 0) == -1) {
 			perror("send");
 			exit(1);
 		}
