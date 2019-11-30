@@ -1,3 +1,18 @@
+/*
+ICSI 333 Programming at the Hardware-Software Interface
+Fall 2019
+Friday 1:40pm
+Evan Poon and Tony Comanzo
+001324907 and 001381954
+
+Program is that of the game Battleship. Game board is created and ships
+are randomly placed onto the board. Prompts user for letter and number
+input for coordinates. Prints whether or not it's a hit or a miss. Runs
+until all available hit-spots are marked off. Creates a log file of all
+taken and lists coordinates fired at, whether it was a hit or miss, and,
+if it was a hit, what type of ship was hit.
+*/
+
 // usage for server: battleshipP4 port
 // usage for client: battleshipP4 ipaddress port
 
@@ -232,13 +247,13 @@ void createListenSocket() {
 
 char** initialization(char ***argv){
 	if (ipAddress[0] == 0){
-		printf("create listen socket");
+		printf("create listen socket...\n");
 		// i.e. create server side
 		/*add function call of create listen socket*/
 		createListenSocket();
 	}
 	else{
-		printf("create sending socket");
+		printf("create sending socket...\n");
 		// i.e. create client side
 		/*add function call of create sending socket*/
 		createSendingSocket(argv);
@@ -340,7 +355,7 @@ struct move* accept_input(){
 void display_state(char* state, char** board){
 	int i, j;
 	printf("**** %s ****\n\n", state);
-	printf(" 0 1 2 3 4 5 6 7 8 9\n");
+	printf("  0 1 2 3 4 5 6 7 8 9\n");
 	for (i = 0; i < SIZE; i++){
 		printf("%c ", 65+i);
 		for (j = 0; j < SIZE; j++){
@@ -451,31 +466,31 @@ int main(int argc, char **argv) {
 	/*modify the initialization function */
 	board = initialization(&argv);
 	do{
+		struct move theirMove;
 		display_state(state, board);
 		ourMove = accept_input();
 		/*add code below to send our move to the other player*/
-		if (send_letter(listenSocket, &(ourMove->letter)) != 0) {
+		if (send_letter(ourSocket, &(ourMove->letter)) != 0) {
 			printf("Error sending letter.\n");
 			exit(1);
 		}
-		if (send_number(listenSocket, &(ourMove->number)) != 0) {
+		if (send_number(ourSocket, &(ourMove->number)) != 0) {
 			printf("Error sending number.\n");
 			exit(1);
 		}
 		/*add code to receive the state of our move from the other player*/
 		char buffer[20];
 		int numbytes = 0;
-		printf("ourSocket: %d\n", ourSocket);
-		if ((numbytes = recv(ourSocket, buffer, 4, 0)) == -1) {
+		if ((numbytes = recv(listenSocket, buffer, 4, 0)) == -1) {
 			perror("recv");
 			exit(1);
 		}
+		printf("ourSocket: %c%d\n", ourMove->letter, ourMove->number);
 		buffer[numbytes] = '\0';
 		printf("Received state: %s\n", buffer);
 		strcpy(state, buffer);
 		/*add code to store our moves (letter, number, and result) into linked list*/
 		strcpy(ourMove->state, state);
-		struct move theirMove;
 		/*add code below to receive theirMove from the other player*/
 		if (receive_letter(ourSocket, &(theirMove.letter)) != 0) {
 			printf("Error receiving letter.\n");
