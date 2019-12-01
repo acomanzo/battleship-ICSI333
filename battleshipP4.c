@@ -1,3 +1,18 @@
+/*
+ICSI 333 Programming at the Hardware-Software Interface
+Fall 2019
+Friday 1:40pm
+Evan Poon and Tony Comanzo
+001324907 and 001381954
+
+Program is that of the game Battleship. Game board is created and ships
+are randomly placed onto the board. Prompts user for letter and number
+input for coordinates. Prints whether or not it's a hit or a miss. Runs
+until all available hit-spots are marked off. Creates a log file of all
+taken and lists coordinates fired at, whether it was a hit or miss, and,
+if it was a hit, what type of ship was hit.
+*/
+
 // usage for server: battleshipP4 port
 // usage for client: battleshipP4 ipaddress port
 
@@ -138,17 +153,17 @@ void createSendingSocket(char ***argv) {
     return ;
   }
 
-	if ((recv(ourSocket, buf, MAXDATASIZE, 0)) == -1) {
+	/*if ((recv(ourSocket, buf, MAXDATASIZE, 0)) == -1) {
 		perror("recv");
 		exit(1);
 	}
-	printf("%s\n", buf);
+	printf("%s\n", buf);*/
 
   inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, sizeof s);
   printf("client: connecting to %s\n", s);
   freeaddrinfo(servinfo); // all done with this structure
 
-	printf("ourSocket: %d\n", ourSocket);
+	//printf("ourSocket: %d\n", ourSocket);
 }
 
 // server side
@@ -220,9 +235,7 @@ void createListenSocket() {
   while(1) {  // main accept() loop
     sin_size = sizeof their_addr;
     new_fd = accept(listenSocket, (struct sockaddr *)&their_addr, &sin_size);
-		//listenSocket = accept(listenSocket, (struct sockaddr *)&their_addr, &sin_size);
     if (new_fd == -1) {
-		//if (listenSocket == -1) {
       perror("accept");
       continue;
     }
@@ -233,47 +246,12 @@ void createListenSocket() {
     printf("server: got connection from %s\n", s);
 		break;
   }
-	if ((send(new_fd, "test", 4, 0)) == -1) {
+	/*if ((send(new_fd, "test", 4, 0)) == -1) {
 		perror("send");
 		exit(1);
-	}
+	}*/
 	transferSocket = new_fd;
-	//close(new_fd);
-	//printf("new_fd: %d\n", new_fd);
-	//printf("listenSocket: %d\n", listenSocket);
-	//return new_fd;
-	//theirSocket = new_fd;
 }
-
-void createNewlistenSocket() {
-	int new_fd;
-	struct sockaddr_storage their_addr; // connector's address information
-  socklen_t sin_size;
-	char s[INET6_ADDRSTRLEN];
-
-	while(1) {  // main accept() loop
-    sin_size = sizeof their_addr;
-    //new_fd = accept(listenSocket, (struct sockaddr *)&their_addr, &sin_size);
-		listenSocket = accept(listenSocket, (struct sockaddr *)&their_addr, &sin_size);
-    //if (new_fd == -1) {
-		if (listenSocket == -1) {
-      perror("accept");
-      continue;
-    }
-
-    inet_ntop(their_addr.ss_family,
-      get_in_addr((struct sockaddr *)&their_addr),
-      s, sizeof s);
-    printf("server: got connection from %s\n", s);
-		break;
-  }
-	//printf("new_fd: %d\n", new_fd);
-	//printf("listenSocket: %d\n", listenSocket);
-	//return new_fd;
-	//theirSocket = new_fd;
-}
-
-void createNewSendingSocket() {}
 
 char** initialization(char ***argv){
 	if (ipAddress[0] == 0){
@@ -340,22 +318,22 @@ void update_state(char* state, char ** board, struct move** head,struct move** t
 		}
 		board[row][col]='X';
 	}
-	if (flag == 0) {
+	/*if (flag == 0) {
 		insert_move(head,tail,temp);
-	}
+	}*/
 	int counter = 0;
 	for(i=0; i < SIZE; i++){
 		for(j=0; j < SIZE; j++){
 			if(board[i][j] == '-' || board[i][j] == 'X')
-			//if(board[i][j] == 'X')
 				counter += 1;
 		}
 	}
-	printf("Counter: %d\n", counter);
-	if(counter == (SIZE * SIZE))
-		printf("Counter is 100\n");
+	//printf("Counter: %d\n", counter);
+	if(counter == (SIZE * SIZE)) {
+		//printf("Counter is 100\n");
 		strcpy(state, "GAME OVER!");
-		printf("State: %s\n", state);
+		//printf("State: %s\n", state);
+	}
 }
 
 struct move* accept_input(){
@@ -413,130 +391,18 @@ int teardown(char ** board,struct move* head){
 	if (head==NULL){
 		printf("The list is empty");
 	} else{
+		//int counter = 0;
 		while (head != NULL){
 			fprintf(fptr, "Fired at %c%d %s %s \n", head->letter, head->number, head->state,
 			head->ship);
 			temp = head;
 			head = head->next;
 				free(temp);
+				//printf("Freed node number %d\n", counter);
+				//counter++;
 			}
 		}
 	fclose(fptr);
-	return 0;
-}
-
-int receive_letter(int *socket_fd, char *letter) {
-	int numbytes;
- 	//char row = 'A';
-
-	int new_fd;
-	struct sockaddr_storage their_addr; // connector's address information
-  socklen_t sin_size;
-	char s[INET6_ADDRSTRLEN];
-
-	while(1) {  // main accept() loop
-		printf("socket before accept: %d\n", *socket_fd);
-    sin_size = sizeof their_addr;
-    //new_fd = accept(*socket_fd, (struct sockaddr *)&their_addr, &sin_size);
-		new_fd = accept(*socket_fd, (struct sockaddr *)&their_addr, &sin_size);
-		printf("socket after accept: %d\n", *socket_fd);
-		printf("new_fd: %d\n", new_fd);
-    if (new_fd == -1) {
-		//if (*socket_fd == -1) {
-      perror("accept");
-			exit(1);
-      continue;
-    }
-
-    inet_ntop(their_addr.ss_family,
-      get_in_addr((struct sockaddr *)&their_addr),
-      s, sizeof s);
-    printf("server: got connection from %s\n", s);
-		break;
-  }
-
-	//if ((numbytes = recv(socket_fd, letter, 1, 0)) == -1) {
-	if ((numbytes = recv(new_fd, letter, 1, 0)) == -1) {
-  	perror("recv");
-    exit(1);
-  }
-	//letter[numbytes] = '\0';
-	printf("Received letter: %c...\n", *letter);
-
-	close(new_fd);
-	return 0;
-}
-
-int receive_number(int *socket_fd, int *number) {
-	int numbytes;
-	//int col = '0';
-
-	int new_fd;
-	struct sockaddr_storage their_addr; // connector's address information
-  socklen_t sin_size;
-	char s[INET6_ADDRSTRLEN];
-
-	while(1) {  // main accept() loop
-    sin_size = sizeof their_addr;
-    new_fd = accept(*socket_fd, (struct sockaddr *)&their_addr, &sin_size);
-		//*socket_fd = accept(*socket_fd, (struct sockaddr *)&their_addr, &sin_size);
-    //if (new_fd == -1) {
-		if (new_fd == -1) {
-      perror("accept");
-			exit(1);
-      continue;
-    }
-
-    inet_ntop(their_addr.ss_family,
-      get_in_addr((struct sockaddr *)&their_addr),
-      s, sizeof s);
-    printf("server: got connection from %s\n", s);
-		break;
-  }
-
-	//if ((numbytes = recv(socket_fd, number, 1, 0)) == -1) {
-	if ((numbytes = recv(new_fd, number, 1, 0)) == -1) {
-		perror("recv");
-		exit(1);
-	}
-	//letter[numbtyes] = '\0';
-	printf("Received number: %d\n", *number);
-	close(new_fd);
-	return 0;
-}
-
-int receive_state(int *socket_fd, char *buffer) {
-	int numbytes;
-	int new_fd;
-	struct sockaddr_storage their_addr; // connector's address information
-  socklen_t sin_size;
-	char s[INET6_ADDRSTRLEN];
-
-	while(1) {  // main accept() loop
-		printf("socket before accept: %d\n", *socket_fd);
-    sin_size = sizeof their_addr;
-		new_fd = accept(*socket_fd, (struct sockaddr *)&their_addr, &sin_size);
-		printf("socket after accept: %d\n", *socket_fd);
-		printf("new_fd: %d\n", new_fd);
-    if (new_fd == -1) {
-      perror("accept");
-			exit(1);
-      continue;
-    }
-
-    inet_ntop(their_addr.ss_family,
-      get_in_addr((struct sockaddr *)&their_addr),
-      s, sizeof s);
-    printf("server: got connection from %s\n", s);
-		break;
-  }
-	if ((numbytes = recv(new_fd, buffer, 4, 0)) == -1) {
-  	perror("recv");
-    exit(1);
-  }
-	printf("Received state: %s...\n", buffer);
-
-	close(new_fd);
 	return 0;
 }
 
@@ -545,7 +411,7 @@ int send_letter(int socket_fd, char *letter) {
 		perror("send");
 		exit(1);
 	}
-	printf("Sent letter: %c...\n", *letter);
+	//printf("Sent letter: %c...\n", *letter);
 
 	return 0;
 }
@@ -555,7 +421,7 @@ int send_number(int socket_fd, int *number) {
 		perror("send");
 		exit(1);
 	}
-	printf("Sent number: %d\n", *number);
+	//printf("Sent number: %d\n", *number);
 
 	return 0;
 }
@@ -591,8 +457,8 @@ int main(int argc, char **argv) {
 		ourMove = accept_input();
 		char buffer[20];
 		int numbytes = 0;
-		printf("listenSocket: %d\n", listenSocket);
-		printf("ourSocket: %d\n", ourSocket);
+		//printf("listenSocket: %d\n", listenSocket);
+		//printf("ourSocket: %d\n", ourSocket);
 		/*add code below to send our move to the other player*/
 		if (listenSocket != 0) {
 			if (send_letter(transferSocket, &(ourMove->letter)) != 0) {
@@ -603,10 +469,8 @@ int main(int argc, char **argv) {
 				printf("Error sending number.\n");
 				exit(1);
 			}
-			//close(transferSocket);
 		}
 		else {
-			//createSendingSocket(&argv);
 			if (send_letter(ourSocket, &(ourMove->letter)) != 0) {
 				printf("Error sending letter.\n");
 				exit(1);
@@ -619,78 +483,62 @@ int main(int argc, char **argv) {
 		struct move theirMove;
 		/*add code below to receive theirMove from the other player*/
 		if (listenSocket != 0) {
-			printf("In listen socket receiving letter...\n");
+			//printf("In listen socket receiving letter...\n");
 			int numbytes;
 
 			if ((numbytes = recv(transferSocket, &(theirMove.letter), 1, 0)) == -1) {
 		  	perror("recv");
 		    exit(1);
 		  }
-			/*if (receive_letter(&listenSocket, &(theirMove.letter)) != 0) {
-				printf("Error receiving letter.\n");
-				exit(1);
-			}*/
-			printf("In listen socket receiving number...\n");
-			/*if (receive_number(&listenSocket, &(theirMove.number)) != 0) {
-				printf("Error receiving number.\n");
-				exit(1);
-			}*/
+			//printf("In listen socket receiving number...\n");
 			if ((numbytes = recv(transferSocket, &(theirMove.number), 1, 0)) == -1) {
 		  	perror("recv");
 		    exit(1);
 		  }
-			printf("Received %c%d\n", theirMove.letter, theirMove.number);
+			//printf("Received %c%d\n", theirMove.letter, theirMove.number);
 		}
 		else {
-			printf("In our socket receiving letter...\n");
-			/*if (receive_letter(&ourSocket, &(theirMove.letter)) != 0) {
-				printf("Error receiving letter.\n");
-				exit(1);
-			}*/
+			//printf("In our socket receiving letter...\n");
 			if ((numbytes = recv(ourSocket, &(theirMove.letter), 1, 0)) == -1) {
 		  	perror("recv");
 		    exit(1);
 		  }
-			printf("In our socket receiving number...\n");
-			/*if (receive_number(&ourSocket, &(theirMove.number)) != 0) {
-				printf("Error receiving number.\n");
-				exit(1);
-			}*/
+			//printf("In our socket receiving number...\n");
 			if ((numbytes = recv(ourSocket, &(theirMove.number), 1, 0)) == -1) {
 		  	perror("recv");
 		    exit(1);
 		  }
-			printf("Received %c%d\n", theirMove.letter, theirMove.number);
+			//printf("Received %c%d\n", theirMove.letter, theirMove.number);
 		}
 
 		/*modify the update_state function to check theirMove is HIT or MISS
 		* and send the state back to the other player */
+		//printf("State in main right before update_state: %s\n", state);
 		update_state(state, board, &head, &tail, &theirMove, 0);
-		printf("State in main right after update_state: %s\n", state);
+		//printf("State in main right after update_state: %s\n", state);
 		if (listenSocket != 0) {
-			if (send(transferSocket, theirMove.state, 4, 0) == -1) {
+			if (send(transferSocket, state, 10, 0) == -1) {
 				perror("send");
 				exit(1);
 			}
 		}
 		else {
-			if (send(ourSocket, theirMove.state, 4, 0) == -1) {
+			if (send(ourSocket, state, 10, 0) == -1) {
 				perror("send");
 				exit(1);
 			}
 		}
-		printf("Sent state: %s\n", theirMove.state);
+		//printf("Sent state: %s\n", state);
 		/*add code to receive the state of our move from the other player*/
 		if (listenSocket != 0) {
-			printf("In listen socket\n");
+			//printf("In listen socket\n");
 			if ((numbytes = recv(transferSocket, buffer, 10, 0)) == -1) {
 				perror("recv");
 				exit(1);
 			}
-			//receive_state(&listenSocket, buffer);
 		}
 		else {
-			printf("In our socket\n");
+			//printf("In our socket\n");
 			if ((numbytes = recv(ourSocket, buffer, 10, 0)) == -1) {
 				perror("recv");
 				exit(1);
@@ -698,12 +546,13 @@ int main(int argc, char **argv) {
 		}
 
 		buffer[numbytes] = '\0';
-		printf("Received state: %s\n", buffer);
+		//printf("Received state: %s\n", buffer);
 		strcpy(state, buffer);
 		/*add code to store our moves (letter, number, and result) into linked list*/
 		strcpy(ourMove->state, state);
-
+		insert_move(&head, &tail, ourMove);
 	} while(strcmp(state, flag));
+	printf("%s\n", state);
 	teardown(board, head);
 	return 0;
 }
