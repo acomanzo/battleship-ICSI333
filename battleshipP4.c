@@ -347,11 +347,15 @@ void update_state(char* state, char ** board, struct move** head,struct move** t
 	for(i=0; i < SIZE; i++){
 		for(j=0; j < SIZE; j++){
 			if(board[i][j] == '-' || board[i][j] == 'X')
+			//if(board[i][j] == 'X')
 				counter += 1;
 		}
 	}
-	if(counter == SIZE * SIZE)
+	printf("Counter: %d\n", counter);
+	if(counter == (SIZE * SIZE))
+		printf("Counter is 100\n");
 		strcpy(state, "GAME OVER!");
+		printf("State: %s\n", state);
 }
 
 struct move* accept_input(){
@@ -602,6 +606,7 @@ int main(int argc, char **argv) {
 			//close(transferSocket);
 		}
 		else {
+			//createSendingSocket(&argv);
 			if (send_letter(ourSocket, &(ourMove->letter)) != 0) {
 				printf("Error sending letter.\n");
 				exit(1);
@@ -615,15 +620,25 @@ int main(int argc, char **argv) {
 		/*add code below to receive theirMove from the other player*/
 		if (listenSocket != 0) {
 			printf("In listen socket receiving letter...\n");
-			if (receive_letter(&listenSocket, &(theirMove.letter)) != 0) {
+			int numbytes;
+
+			if ((numbytes = recv(transferSocket, &(theirMove.letter), 1, 0)) == -1) {
+		  	perror("recv");
+		    exit(1);
+		  }
+			/*if (receive_letter(&listenSocket, &(theirMove.letter)) != 0) {
 				printf("Error receiving letter.\n");
 				exit(1);
-			}
+			}*/
 			printf("In listen socket receiving number...\n");
-			if (receive_number(&listenSocket, &(theirMove.number)) != 0) {
+			/*if (receive_number(&listenSocket, &(theirMove.number)) != 0) {
 				printf("Error receiving number.\n");
 				exit(1);
-			}
+			}*/
+			if ((numbytes = recv(transferSocket, &(theirMove.number), 1, 0)) == -1) {
+		  	perror("recv");
+		    exit(1);
+		  }
 			printf("Received %c%d\n", theirMove.letter, theirMove.number);
 		}
 		else {
@@ -651,8 +666,9 @@ int main(int argc, char **argv) {
 		/*modify the update_state function to check theirMove is HIT or MISS
 		* and send the state back to the other player */
 		update_state(state, board, &head, &tail, &theirMove, 0);
+		printf("State in main right after update_state: %s\n", state);
 		if (listenSocket != 0) {
-			if (send(listenSocket, theirMove.state, 4, 0) == -1) {
+			if (send(transferSocket, theirMove.state, 4, 0) == -1) {
 				perror("send");
 				exit(1);
 			}
@@ -667,15 +683,15 @@ int main(int argc, char **argv) {
 		/*add code to receive the state of our move from the other player*/
 		if (listenSocket != 0) {
 			printf("In listen socket\n");
-			/*if ((numbytes = recv(listenSocket, buffer, 4, 0)) == -1) {
+			if ((numbytes = recv(transferSocket, buffer, 10, 0)) == -1) {
 				perror("recv");
 				exit(1);
-			}*/
-			receive_state(&listenSocket, buffer);
+			}
+			//receive_state(&listenSocket, buffer);
 		}
 		else {
 			printf("In our socket\n");
-			if ((numbytes = recv(ourSocket, buffer, 4, 0)) == -1) {
+			if ((numbytes = recv(ourSocket, buffer, 10, 0)) == -1) {
 				perror("recv");
 				exit(1);
 			}
