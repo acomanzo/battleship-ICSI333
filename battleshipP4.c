@@ -4,6 +4,7 @@ Fall 2019
 Friday 1:40pm
 Evan Poon and Tony Comanzo
 001324907 and 001381954
+
 Program is that of the game Battleship. Game board is created and ships
 are randomly placed onto the board. Prompts user for letter and number
 input for coordinates. Prints whether or not it's a hit or a miss. Runs
@@ -49,7 +50,7 @@ struct move{
 char ipAddress[200], port[200];
 int ourSocket = 0;
 int listenSocket = 0;
-int transferSocket = 0;
+int transferSocket = 0; // the socket the server uses to communicate with client
 
 void sigchld_handler(int s) {
 	(void)s; // quiet unused variable warning
@@ -305,7 +306,6 @@ void update_state(char* state, char ** board, struct move** head,struct move** t
 		strcpy(state, "MISS");
 		strcpy(temp->state, "MISS");
 		strcpy(temp->ship, "  ");
-		board[row][col] = 'O';
 	} else{
 		strcpy(state, "HIT");
 		strcpy(temp->state, "HIT!");
@@ -324,12 +324,12 @@ void update_state(char* state, char ** board, struct move** head,struct move** t
 	int counter = 0;
 	for(i=0; i < SIZE; i++){
 		for(j=0; j < SIZE; j++){
-			if(board[i][j] == 'X')
+			if(board[i][j] == '-' || board[i][j] == 'X')
 				counter += 1;
 		}
 	}
 	//printf("Counter: %d\n", counter);
-	if(counter == 17) {
+	if(counter == (SIZE * SIZE)) {
 		//printf("Counter is 100\n");
 		strcpy(state, "GAME OVER!");
 		//printf("State: %s\n", state);
@@ -367,7 +367,7 @@ struct move* accept_input(){
 void display_state(char* state, char** board){
 	int i, j;
 	printf("**** %s ****\n\n", state);
-	printf("  0 1 2 3 4 5 6 7 8 9\n");
+	printf(" 0 1 2 3 4 5 6 7 8 9\n");
 	for (i = 0; i < SIZE; i++){
 		printf("%c ", 65+i);
 		for (j = 0; j < SIZE; j++){
@@ -390,19 +390,24 @@ int teardown(char ** board,struct move* head){
 	}
 	if (head==NULL){
 		printf("The list is empty");
-	} else{
+	}
+	else {
 		//int counter = 0;
-		while (head != NULL){
+		while (head != NULL) {
 			fprintf(fptr, "Fired at %c%d %s %s \n", head->letter, head->number, head->state,
-			head->ship);
+				head->ship);
 			temp = head;
 			head = head->next;
-				free(temp);
-				//printf("Freed node number %d\n", counter);
-				//counter++;
-			}
+			free(temp);
+			//printf("Freed %d: %c%d\n", counter, temp->letter, temp->number);
+			//counter++;
 		}
+	}
 	fclose(fptr);
+	// close the sockets
+	close(ourSocket);
+	close(listenSocket);
+	close(transferSocket);
 	return 0;
 }
 
