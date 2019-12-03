@@ -291,24 +291,20 @@ void insert_move(struct move **head, struct move **tail,struct move *temp){
 		*head = *tail = temp;
 
 	} else{
+		//printf("%s\n", "bye");
 		(*tail)->next = temp;
 		*tail = (*tail)->next;
+		(*tail)->next = NULL;
 	}
 }
 
 // int flag represents their data if 1 and our data if 0
 void update_state(char* state, char ** board, struct move** head,struct move** tail, struct move* temp, int flag){
-	int row, i, j;
-	char letter = temp->letter;
-	int col = temp->number;
-	row = letter % 65;
-	if(board[row][col] == '-'){
-		strcpy(state, "MISS");
-		strcpy(temp->state, "MISS");
-		strcpy(temp->ship, "  ");
-	} else{
-		strcpy(state, "HIT");
-		strcpy(temp->state, "HIT!");
+	if (flag == 0) {
+		int row;
+		char letter = temp->letter;
+		int col = temp->number;
+		row = letter % 65;
 		switch (board[row][col]){
 			case 'C':  strcpy(temp->ship, "Crusier"); break;
 			case 'R':  strcpy(temp->ship, "Carrier"); break;
@@ -316,23 +312,44 @@ void update_state(char* state, char ** board, struct move** head,struct move** t
 			case 'S':  strcpy(temp->ship, "Submarine"); break;
 			case 'D':  strcpy(temp->ship, "Destroyer"); break;
 		}
-		board[row][col]='X';
 	}
-	/*if (flag == 0) {
-		insert_move(head,tail,temp);
-	}*/
-	int counter = 0;
-	for(i=0; i < SIZE; i++){
-		for(j=0; j < SIZE; j++){
-			if(board[i][j] == '-' || board[i][j] == 'X')
-				counter += 1;
+	else {
+		int row, i, j;
+		char letter = temp->letter;
+		int col = temp->number;
+		row = letter % 65;
+		if(board[row][col] == '-'){
+			strcpy(state, "MISS");
+			strcpy(temp->state, "MISS");
+			strcpy(temp->ship, "  ");
+		} else{
+			strcpy(state, "HIT");
+			strcpy(temp->state, "HIT!");
+			switch (board[row][col]){
+				case 'C':  strcpy(temp->ship, "Crusier"); break;
+				case 'R':  strcpy(temp->ship, "Carrier"); break;
+				case 'B':  strcpy(temp->ship, "Battleship"); break;
+				case 'S':  strcpy(temp->ship, "Submarine"); break;
+				case 'D':  strcpy(temp->ship, "Destroyer"); break;
+			}
+			board[row][col]='X';
 		}
-	}
-	//printf("Counter: %d\n", counter);
-	if(counter == (SIZE * SIZE)) {
-		//printf("Counter is 100\n");
-		strcpy(state, "GAME OVER!");
-		//printf("State: %s\n", state);
+		/*if (flag == 0) {
+			insert_move(head,tail,temp);
+		}*/
+		int counter = 0;
+		for(i=0; i < SIZE; i++){
+			for(j=0; j < SIZE; j++){
+				if(board[i][j] == '-' || board[i][j] == 'X')
+					counter += 1;
+			}
+		}
+		//printf("Counter: %d\n", counter);
+		if(counter == (SIZE * SIZE)) {
+			//printf("Counter is 100\n");
+			strcpy(state, "GAME OVER!");
+			//printf("State: %s\n", state);
+		}
 	}
 }
 
@@ -361,6 +378,7 @@ struct move* accept_input(){
 		temp = (struct move *)malloc(sizeof(struct move));
 		temp->letter = letter;
 		temp->number = number;
+		temp->next = NULL;
 		return temp;
 }
 
@@ -384,7 +402,12 @@ int teardown(char ** board,struct move* head){
 		free(board[i]);
 	free(board);
 	FILE *fptr;
-	fptr = fopen("log.txt", "w");
+	if (listenSocket == 0) {
+		fptr = fopen("log_client.txt", "w");
+	}
+	else {
+		fptr = fopen("log_server.txt", "w");
+	}
 	if (fptr == NULL) {
 		exit(-1);
 	}
@@ -392,14 +415,15 @@ int teardown(char ** board,struct move* head){
 		printf("The list is empty");
 	}
 	else {
-		//int counter = 0;
+		int counter = 0;
 		while (head != NULL) {
+			//printf("Fired at %c%d %s %s\n", head->letter, head->number, head->state, head->ship);
 			fprintf(fptr, "Fired at %c%d %s %s \n", head->letter, head->number, head->state,
 				head->ship);
 			temp = head;
 			head = head->next;
 			free(temp);
-			//printf("Freed %d: %c%d\n", counter, temp->letter, temp->number);
+			//printf("Freed #%d\n", counter);
 			//counter++;
 		}
 	}
@@ -519,7 +543,8 @@ int main(int argc, char **argv) {
 		/*modify the update_state function to check theirMove is HIT or MISS
 		* and send the state back to the other player */
 		//printf("State in main right before update_state: %s\n", state);
-		update_state(state, board, &head, &tail, &theirMove, 0);
+		update_state(state, board, &head, &tail, ourMove, 0);
+		update_state(state, board, &head, &tail, &theirMove, 1);
 		//printf("State in main right after update_state: %s\n", state);
 		if (listenSocket != 0) {
 			if (send(transferSocket, state, 10, 0) == -1) {
@@ -552,8 +577,9 @@ int main(int argc, char **argv) {
 
 		buffer[numbytes] = '\0';
 		//printf("Received state: %s\n", buffer);
-		strcpy(state, buffer);
+
 		/*add code to store our moves (letter, number, and result) into linked list*/
+		strcpy(state, buffer);
 		strcpy(ourMove->state, state);
 		insert_move(&head, &tail, ourMove);
 	} while(strcmp(state, flag));
